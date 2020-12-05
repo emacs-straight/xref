@@ -931,6 +931,46 @@ local keymap that binds `RET' to `xref-quit-and-goto-xref'."
                        '(display-buffer-in-direction . ((direction . below))))
         (current-buffer))))))
 
+(defun xref--show-defs-minibuffer (fetcher alist)
+  (let* ((xrefs (funcall fetcher))
+         (xref-alist (xref--analyze xrefs))
+         xref-alist-with-line-info
+         xref
+         (group-prefix-length
+          ;; FIXME: Groups are not always file names, but they often
+          ;; are.  At least this shouldn't make the other kinds of
+          ;; groups look worse.
+          (let ((common-prefix (try-completion "" xref-alist)))
+            (if (> (length common-prefix) 0)
+                (length (file-name-directory common-prefix))
+              0))))
+
+    (cl-loop for ((group . xrefs) . more1) on xref-alist
+             do
+             (cl-loop for (xref . more2) on xrefs do
+                      (with-slots (summary location) xref
+                        (let* ((line (xref-location-line location))
+                               (line-fmt
+                                (if line
+                                    (format #("%d:" 0 2 (face xref-line-number))
+                                            line)
+                                  ""))
+                               (group-fmt
+                                (propertize
+                                 (substring group group-prefix-length)
+                                 'face 'xref-file-header))
+                               (candidate
+                                (format "%s:%s%s" group-fmt line-fmt summary)))
+                          (push (cons candidate xref) xref-alist-with-line-info)))))
+
+    (setq xref (if (not (cdr xrefs))
+                   (car xrefs)
+                 (cdr (assoc (completing-read "Jump to definition: "
+                                              (reverse xref-alist-with-line-info))
+                             xref-alist-with-line-info))))
+
+    (xref-pop-to-location xref (assoc-default 'display-action alist))))
+
 
 (defcustom xref-show-xrefs-function 'xref--show-xref-buffer
   "Function to display a list of search results.
@@ -1286,8 +1326,9 @@ IGNORES is a list of glob patterns for files to ignore."
 Program identifier should be a symbol, named after the search program.
 
 The command template must be a shell command (or usually a
-pipeline) that will search the list of files which will be piped
-from stdin.  The template should have following fields:
+pipeline) that will search the files based on the list of file
+names that is piped from stdin, separated by null characters.
+The template should have the following fields:
 
   <C> for extra arguments such as -i and --color
   <R> for the regexp itself (in Extended format)"
@@ -1296,7 +1337,7 @@ from stdin.  The template should have following fields:
                 (string :tag "Command template"))))
 
 (defcustom xref-search-program 'grep
-  "The program to use to search inside files.
+  "The program to use for regexp search inside files.
 
 This must reference a corresponding entry in `xref-search-program-alist'."
   :type `(choice
