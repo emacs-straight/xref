@@ -692,8 +692,8 @@ and finally return the window."
 
 (defun xref--show-location (location &optional select)
   "Help `xref-show-xref' and `xref-goto-xref' do their job.
-Go to LOCATION and if SELECT is non-nil select its window.  If
-SELECT is `quit', also quit the *xref* window."
+Go to LOCATION and if SELECT is non-nil select its window.
+If SELECT is `quit', also quit the *xref* window."
   (condition-case err
       (let* ((marker (xref-location-marker location))
              (buf (marker-buffer marker))
@@ -974,7 +974,8 @@ ITEMS is an xref item which " ; FIXME: Expand documentation.
     (define-key map (kbd "M-,") #'xref-quit-and-pop-marker-stack)
     map))
 
-(declare-function outline-search-text-property "outline" (property &optional value bound move backward looking-at))
+(declare-function outline-search-text-property "outline"
+		  (property &optional value bound move backward looking-at))
 
 (define-derived-mode xref--xref-buffer-mode special-mode "XREF"
   "Mode for displaying cross-references."
@@ -985,6 +986,8 @@ ITEMS is an xref item which " ; FIXME: Expand documentation.
         #'xref--imenu-prev-index-position)
   (setq imenu-extract-index-name-function
         #'xref--imenu-extract-index-name)
+  (setq-local add-log-current-defun-function
+	      #'xref--add-log-current-defun)
   (setq-local outline-minor-mode-cycle t
               outline-minor-mode-use-buttons t
               outline-search-function
@@ -1001,7 +1004,7 @@ ITEMS is an xref item which " ; FIXME: Expand documentation.
 
 (define-derived-mode xref--transient-buffer-mode
   xref--xref-buffer-mode
-  "XREF Transient")
+  "XREF Transient.")
 
 (defun xref--imenu-prev-index-position ()
   "Move point to previous line in `xref' buffer.
@@ -1018,6 +1021,15 @@ This function is used as a value for
 beginning of the line."
   (buffer-substring-no-properties (line-beginning-position)
                                   (line-end-position)))
+
+(defun xref--add-log-current-defun ()
+  "Return the string used to group a set of locations.
+This function is used as a value for `add-log-current-defun-function'."
+  (xref--group-name-for-display
+   (if-let (item (xref--item-at-point))
+       (xref-location-group (xref-match-item-location item))
+     (xref--imenu-extract-index-name))
+   (xref--project-root (project-current))))
 
 (defun xref--next-error-function (n reset?)
   (when reset?
@@ -1165,7 +1177,7 @@ to that style.  Otherwise it is returned unchanged."
   (cl-ecase xref-file-name-display
     (abs group)
     (nondirectory
-     (if (string-match-p "\\`~?/" group)
+     (if (file-name-absolute-p group)
          (file-name-nondirectory group)
        group))
     (project-relative
@@ -1406,7 +1418,7 @@ FETCHER is a function of no arguments that returns a list of xref
 values.  It must not depend on the current buffer or selected
 window.
 
-ALIST can include, but limited to, the following keys:
+ALIST can include, but is not limited to, the following keys:
 
 WINDOW for the window that was selected before the current
 command was called.
@@ -1807,7 +1819,7 @@ IGNORES is a list of glob patterns for files to ignore."
      "xargs -0 rg <C> --null -nH --no-heading --no-messages -g '!*/' -e <R>"
      )
     (ugrep . "xargs -0 ugrep <C> --null -ns -e <R>"))
-  "Associative list mapping program identifiers to command templates.
+  "Association list mapping program identifiers to command templates.
 
 Program identifier should be a symbol, named after the search program.
 
